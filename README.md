@@ -69,3 +69,19 @@ Seed creates: admin (from .env), demo users (e.g. alice/bob, password from `DEMO
 - `POST /api/tasks/complete` - Complete task `{ "userId", "taskId", "idempotencyKey?" }` (self only)
 
 All responses: `{ success, data?, error? }`.
+
+## Deploy (Vercel CI/CD)
+
+Push to the `release` branch to deploy to production.
+
+1. **Connect repo**: In [Vercel](https://vercel.com), import this repo (GitHub/GitLab/Bitbucket).
+
+2. **Production branch**: In the project **Settings → Git**, set **Production Branch** to `release`.  
+   Then every push to `release` triggers a production deployment; other branches get preview deployments.
+
+3. **Environment variables**: In **Settings → Environment Variables**, add the same vars as `.env.local` (e.g. `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) for Production (and Preview if you need DB in previews).
+
+4. **Deploy**: Merge to `release` or push directly:
+   ```bash
+   git push origin release
+   ```
