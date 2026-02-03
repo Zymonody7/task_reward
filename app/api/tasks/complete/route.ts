@@ -4,12 +4,10 @@ import {
   users,
   tasks,
   pointRecords,
-  completions,
-  idempotencyKeys
+  completions
 } from '@/lib/db/schema'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { eq, and } from 'drizzle-orm'
-import { randomUUID } from 'crypto'
 import { TaskType } from '@/lib/types'
 import { getSession } from '@/lib/auth'
 
@@ -22,8 +20,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const userId = typeof body?.userId === 'string' ? body.userId : ''
     const taskId = typeof body?.taskId === 'string' ? body.taskId : ''
-    const idempotencyKey =
-      typeof body?.idempotencyKey === 'string' ? body.idempotencyKey : undefined
 
     if (!userId || !taskId) {
       return apiError('VALIDATION_ERROR', 'userId and taskId are required', 400)
@@ -34,20 +30,6 @@ export async function POST(req: NextRequest) {
         'FORBIDDEN',
         'You can only complete tasks for yourself',
         403
-      )
-    }
-
-    const key = idempotencyKey || randomUUID()
-
-    const [existingKey] = await db
-      .select()
-      .from(idempotencyKeys)
-      .where(eq(idempotencyKeys.key, key))
-    if (existingKey) {
-      return apiError(
-        'IDEMPOTENCY_REPLAY',
-        'Idempotent request detected: This action was already processed.',
-        409
       )
     }
 
@@ -105,32 +87,46 @@ export async function POST(req: NextRequest) {
     }
 
     const reward = Number(task.reward)
-    const currentPoints = Number(user.points)
-    const newPoints = currentPoints + reward
 
-    // neon-http has no transactions; run in order (claim idempotency key first, then update data to avoid double grant on duplicate requests)
+    // Insert completion first: PK (userId, taskId, date) is the single source of truth.
+    // Concurrent requests: only one insert succeeds; the other gets 23505 → already completed.
     try {
-      await db.insert(idempotencyKeys).values({ key })
+      await db.insert(completions).values({
+        userId: user.id,
+        taskId: task.id,
+        date: today
+      })
     } catch (e: unknown) {
       const err = e as { code?: string }
       if (err?.code === '23505') {
-        return apiError(
-          'IDEMPOTENCY_REPLAY',
-          'Idempotent request detected: This action was already processed.',
-          409
+        const [currentUser] = await db
+          .select({ points: users.points })
+          .from(users)
+          .where(eq(users.id, user.id))
+        const code =
+          task.type === TaskType.ONE_TIME
+            ? 'ALREADY_COMPLETED'
+            : 'ALREADY_COMPLETED_TODAY'
+        const message =
+          task.type === TaskType.ONE_TIME
+            ? 'One-time task already completed'
+            : 'Daily task already completed today'
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code, message },
+            user: {
+              id: String(user.id),
+              name: user.name,
+              points: currentUser?.points ?? user.points
+            }
+          },
+          { status: 400 }
         )
       }
       throw e
     }
-    await db
-      .update(users)
-      .set({ points: newPoints })
-      .where(eq(users.id, user.id))
-    const [updatedUser] = await db
-      .select({ points: users.points })
-      .from(users)
-      .where(eq(users.id, user.id))
-    const actualPoints = updatedUser?.points ?? newPoints
+
     const [insertedRecord] = await db
       .insert(pointRecords)
       .values({
@@ -141,11 +137,17 @@ export async function POST(req: NextRequest) {
         note: 'Task Completed'
       })
       .returning({ id: pointRecords.id, createdAt: pointRecords.createdAt })
-    await db.insert(completions).values({
-      userId: user.id,
-      taskId: task.id,
-      date: today
-    })
+
+    await db
+      .update(users)
+      .set({ points: user.points + reward })
+      .where(eq(users.id, user.id))
+
+    const [updatedUser] = await db
+      .select({ points: users.points })
+      .from(users)
+      .where(eq(users.id, user.id))
+    const actualPoints = updatedUser?.points ?? user.points + reward
 
     const record = insertedRecord
       ? {
