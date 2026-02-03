@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: 79 70 229;
+  --primary-foreground: 248 250 252;
+  --border: 226 232 240;
+  --input: 226 232 240;
+  --ring: 148 163 184;
+  --background: 248 250 252;
+  --foreground: 15 23 42;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
