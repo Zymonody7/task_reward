@@ -158,3 +158,12 @@ Open [http://localhost:3000](http://localhost:3000); unauthenticated users go to
 1. Import repo in Vercel. Set production branch to `main`.
 2. Add env vars (e.g. `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`).
 3. Push to `main` to deploy.
+
+## AI tools
+
+| Tool        | Role                                                                 |
+| ----------- | -------------------------------------------------------------------- |
+| GPT         | Summarize requirements                                               |
+| AI Studio   | First pass: frontend UI and mock data                                |
+| Cursor      | Next.js API routes and business logic refinement                     |
+| Codex       | Code review                                                          |
