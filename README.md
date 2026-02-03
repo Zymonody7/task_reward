@@ -35,10 +35,12 @@ Everyone must log in. Single `users` table (name, points, username, password, ro
    - `ADMIN_USERNAME` / `ADMIN_PASSWORD` - Used by `npm run db:seed` only (do not commit)
 
 3. Push schema and seed:
+
    ```bash
    npm run db:push
    npm run db:seed
    ```
+
    If you previously had text-type ids, clear tables or recreate the DB in Neon before push + seed.
 
 4. Start: `npm run dev`
@@ -48,16 +50,16 @@ Seed creates: admin (from .env), demo users (e.g. alice/bob, password from `DEMO
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Next dev server |
-| `npm run build` | Production build |
-| `npm run start` | Start in production |
-| `npm run db:push` | Sync Drizzle schema to Neon |
-| `npm run db:seed` | Seed admin and default tasks (uses ADMIN_*, SESSION_SECRET from .env) |
-| `npm run db:generate` | Generate migrations |
-| `npm run db:migrate` | Run migrations |
-| `npm run db:studio` | Open Drizzle Studio |
+| Command               | Description                                                             |
+| --------------------- | ----------------------------------------------------------------------- |
+| `npm run dev`         | Start Next dev server                                                   |
+| `npm run build`       | Production build                                                        |
+| `npm run start`       | Start in production                                                     |
+| `npm run db:push`     | Sync Drizzle schema to Neon                                             |
+| `npm run db:seed`     | Seed admin and default tasks (uses ADMIN\_\*, SESSION_SECRET from .env) |
+| `npm run db:generate` | Generate migrations                                                     |
+| `npm run db:migrate`  | Run migrations                                                          |
+| `npm run db:studio`   | Open Drizzle Studio                                                     |
 
 ## API
 
@@ -72,16 +74,23 @@ All responses: `{ success, data?, error? }`.
 
 ## Deploy (Vercel CI/CD)
 
-Push to the `release` branch to deploy to production.
+Push to the `main` branch to deploy to production (with **Production Branch** set to `main` in Vercel).
 
 1. **Connect repo**: In [Vercel](https://vercel.com), import this repo (GitHub/GitLab/Bitbucket).
 
-2. **Production branch**: In the project **Settings → Git**, set **Production Branch** to `release`.  
-   Then every push to `release` triggers a production deployment; other branches get preview deployments.
+2. **Production branch**: In the project **Settings → Git**, set **Production Branch** to `main`.  
+   Then every push to `main` triggers a production deployment; other branches get preview deployments.
 
-3. **Environment variables**: In **Settings → Environment Variables**, add the same vars as `.env.local` (e.g. `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) for Production (and Preview if you need DB in previews).
+3. **Environment variables**: In **Settings → Environment Variables**, add the same vars as `.env.local` (e.g. `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) for Production (and Preview if needed).
 
-4. **Deploy**: Merge to `release` or push directly:
+4. **Deploy**: Push to `main`:
    ```bash
-   git push origin release
+   git push origin main
    ```
+
+**Push to main but no auto-deploy?**
+
+- **Settings → Git**: Confirm "Connected Git Repository" shows the correct repo (e.g. `your-org/task-reward-system`). If not, reconnect the repo.
+- **Git provider**: Vercel only reacts to pushes on the connected Git host. Pushing to another remote (e.g. a different GitHub org or a self-hosted Git) will not trigger Vercel.
+- **GitHub**: In the repo **Settings → Webhooks**, there should be a Vercel webhook. If it was removed or shows errors, reconnect the project in Vercel (Settings → Git → Disconnect and re-import).
+- **Deployments tab**: Check whether new commits appear as "Building" or "Queued". If not, the webhook may not be firing; try **Redeploy** from the latest deployment’s "..." menu to confirm the project builds.
