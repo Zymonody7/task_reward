@@ -1,0 +1,5 @@
+{
+  "name": "Task & Reward System",
+  "description": "A task management and reward point system with user tracking, task creation, and dashboard analytics. Features a mock API layer simulating backend logic for one-time and daily tasks.",
+  "requestFramePermissions": []
+}
