@@ -69,6 +69,14 @@ export const apiClient = {
         reward: number;
         enabled: boolean;
       }>(`${base}/api/tasks`, { method: "POST", body: data }),
+    update: (id: string, data: { enabled: boolean }) =>
+      request<{
+        id: string;
+        title: string;
+        type: TaskType;
+        reward: number;
+        enabled: boolean;
+      }>(`${base}/api/tasks/${id}`, { method: "PATCH", body: data }),
     complete: (
       userId: string,
       taskId: string,

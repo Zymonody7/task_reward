@@ -26,6 +26,7 @@ function TasksPageContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [reward, setReward] = useState("10");
@@ -62,6 +63,23 @@ function TasksPageContent() {
       alert(res.error?.message ?? "Failed");
     }
     setCreating(false);
+  };
+
+  const handleToggleEnabled = async (task: Task) => {
+    setTogglingId(task.id);
+    const res = await apiClient.tasks.update(task.id, {
+      enabled: !task.enabled,
+    });
+    setTogglingId(null);
+    if (res.success) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, enabled: res.data!.enabled } : t
+        )
+      );
+    } else {
+      alert(res.error?.message ?? "Failed to update task");
+    }
   };
 
   return (
@@ -124,11 +142,8 @@ function TasksPageContent() {
                     onChange={(e) => setEnabled(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                   />
-                  <label
-                    htmlFor="enabled"
-                    className="text-sm font-medium"
-                  >
-                    Enabled immediately
+                  <label htmlFor="enabled" className="text-sm font-medium">
+                    Enabled immediately (new task goes live right away; unchecked = disabled)
                   </label>
                 </div>
 
@@ -183,11 +198,25 @@ function TasksPageContent() {
                           </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="block text-lg font-bold text-indigo-600">
-                          +{task.reward}
-                        </span>
-                        <span className="text-xs text-slate-500">points</span>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <span className="block text-lg font-bold text-indigo-600">
+                            +{task.reward}
+                          </span>
+                          <span className="text-xs text-slate-500">points</span>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={task.enabled}
+                            disabled={togglingId === task.id}
+                            onChange={() => handleToggleEnabled(task)}
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm text-slate-600">
+                            {task.enabled ? "Enabled" : "Disabled"}
+                          </span>
+                        </label>
                       </div>
                     </div>
                   ))}
