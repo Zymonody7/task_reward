@@ -1,96 +1,160 @@
-# Task & Reward System (RewardSys)
+# Task & Reward System
 
 Next.js app with Neon PostgreSQL and Drizzle ORM for schema.
 
 ## Stack
 
-- **Framework**: Next.js 14 (App Router)
-- **Database**: Neon (PostgreSQL)
-- **ORM**: Drizzle ORM + `@neondatabase/serverless`
-- **Frontend**: React 18, SWR, Tailwind CSS
-- **Auth**: Session (JWT Cookie), RBAC by role
-- **IDs**: UUID primary keys via `gen_random_uuid()`
+- Next.js 14 (App Router)
+- Neon (PostgreSQL), Drizzle ORM, `@neondatabase/serverless`
+- React 18, SWR, Tailwind CSS
+- Session (JWT cookie), RBAC (admin / user)
+- UUID primary keys (`gen_random_uuid()`)
 
-Everyone must log in. Single `users` table (name, points, username, password, role); admin creates users (name + username + password) on the Users page.
+## Database schema
 
-## Structure
+**users**
 
-- `app/` - App Router pages and API routes
-- `app/api/` - API (auth, users, tasks)
-- `lib/db/` - Drizzle schema and Neon client
-- `lib/auth.ts` - Session JWT sign/verify
-- `lib/api/` - Response helpers, API client
-- `context/` - Auth from server session
-- `scripts/seed.ts` - Seed admin and default tasks (config from .env)
+| Column        | Type    | Notes                         |
+| ------------- | ------- | ----------------------------- |
+| id            | uuid    | PK, default gen_random_uuid() |
+| name          | text    | not null                      |
+| points        | integer | not null, default 0           |
+| username      | text    | not null, unique              |
+| password_hash | text    | not null                      |
+| role          | text    | not null ('admin' \| 'user')  |
 
-## Local run
+**tasks**
 
-**Requires**: Node.js 18+
+| Column  | Type    | Notes                            |
+| ------- | ------- | -------------------------------- |
+| id      | uuid    | PK, default gen_random_uuid()    |
+| title   | text    | not null                         |
+| type    | text    | not null ('ONE_TIME' \| 'DAILY') |
+| reward  | integer | not null                         |
+| enabled | boolean | not null, default true           |
 
-1. Install: `npm install`
+**point_records**
 
-2. Env: copy `.env.example` to `.env.local` and set:
-   - `DATABASE_URL` - Neon connection string
-   - `SESSION_SECRET` - At least 32 chars for session signing
-   - `ADMIN_USERNAME` / `ADMIN_PASSWORD` - Used by `npm run db:seed` only (do not commit)
+| Column     | Type        | Notes                                      |
+| ---------- | ----------- | ------------------------------------------ |
+| id         | uuid        | PK, default gen_random_uuid()              |
+| user_id    | uuid        | not null, FK → users.id, on delete cascade |
+| task_id    | uuid        | not null, FK → tasks.id, on delete cascade |
+| task_title | text        | not null                                   |
+| delta      | integer     | not null                                   |
+| created_at | timestamptz | not null, default now()                    |
+| note       | text        | optional                                   |
 
-3. Push schema and seed:
+**completions**
 
-   ```bash
-   npm run db:push
-   npm run db:seed
-   ```
+| Column  | Type | Notes                                      |
+| ------- | ---- | ------------------------------------------ |
+| user_id | uuid | not null, FK → users.id, on delete cascade |
+| task_id | uuid | not null, FK → tasks.id, on delete cascade |
+| date    | text | not null (YYYY-MM-DD)                      |
 
-   If you previously had text-type ids, clear tables or recreate the DB in Neon before push + seed.
+Primary key: `(user_id, task_id, date)`.
 
-4. Start: `npm run dev`
+**idempotency_keys**
 
-[http://localhost:3000](http://localhost:3000) redirects to `/dashboard`; unauthenticated users go to `/login`.  
-Seed creates: admin (from .env), demo users (e.g. alice/bob, password from `DEMO_USER_PASSWORD`), and default tasks.
+| Column     | Type        | Notes                   |
+| ---------- | ----------- | ----------------------- |
+| key        | text        | PK                      |
+| created_at | timestamptz | not null, default now() |
 
-## Scripts
+## Tech choices
 
-| Command               | Description                                                             |
-| --------------------- | ----------------------------------------------------------------------- |
-| `npm run dev`         | Start Next dev server                                                   |
-| `npm run build`       | Production build                                                        |
-| `npm run start`       | Start in production                                                     |
-| `npm run db:push`     | Sync Drizzle schema to Neon                                             |
-| `npm run db:seed`     | Seed admin and default tasks (uses ADMIN\_\*, SESSION_SECRET from .env) |
-| `npm run db:generate` | Generate migrations                                                     |
-| `npm run db:migrate`  | Run migrations                                                          |
-| `npm run db:studio`   | Open Drizzle Studio                                                     |
+- **Next.js + Vercel**: Single repo for API and UI, good fit for Vercel deploy; push to main to deploy, branches for previews.
+- **Neon**: Serverless Postgres with HTTP driver, works in serverless/edge without long-lived TCP; scales to zero.
 
 ## API
 
-- `GET /api/users` - List users (admin only)
-- `POST /api/users` - Create user `{ "name", "username", "password" }` (admin only)
-- `GET /api/users/[id]` - User details (records & completions; self or admin)
-- `GET /api/tasks` - List tasks
-- `POST /api/tasks` - Create task `{ "title", "type", "reward", "enabled" }`
-- `POST /api/tasks/complete` - Complete task `{ "userId", "taskId", "idempotencyKey?" }` (self only)
+All responses: `{ success: boolean, data?: T, error?: { code, message } }`. Some errors (e.g. already completed) may include extra fields like `user`.
 
-All responses: `{ success, data?, error? }`.
+**Auth**
 
-## Deploy (Vercel CI/CD)
+- `POST /api/auth/login` — body `{ username, password }`, sets cookie
+- `POST /api/auth/logout` — clears session
+- `GET /api/auth/session` — current session (userId, role)
 
-Push to the `main` branch to deploy to production (with **Production Branch** set to `main` in Vercel).
+**Users**
 
-1. **Connect repo**: In [Vercel](https://vercel.com), import this repo (GitHub/GitLab/Bitbucket).
+- `GET /api/users` — list users (admin only)
+- `POST /api/users` — create user `{ name, username, password }` (admin only)
+- `GET /api/users/[id]` — user + records + completions (self or admin)
 
-2. **Production branch**: In the project **Settings → Git**, set **Production Branch** to `main`.  
-   Then every push to `main` triggers a production deployment; other branches get preview deployments.
+**Tasks**
 
-3. **Environment variables**: In **Settings → Environment Variables**, add the same vars as `.env.local` (e.g. `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) for Production (and Preview if needed).
+- `GET /api/tasks` — list tasks
+- `POST /api/tasks` — create task `{ title, type, reward, enabled }`, type `ONE_TIME` \| `DAILY` (admin only)
+- `PATCH /api/tasks/[id]` — update task, e.g. `{ enabled }` (admin only)
+- `POST /api/tasks/complete` — complete task (self only). Body: `{ userId, taskId, idempotencyKey? }`. Success: `data` has `user` (with updated points) and `record`.
 
-4. **Deploy**: Push to `main`:
-   ```bash
-   git push origin main
-   ```
+**POST /api/tasks/complete** error codes:
 
-**Push to main but no auto-deploy?**
+| Status | code                    | Meaning                                            |
+| ------ | ----------------------- | -------------------------------------------------- |
+| 401    | UNAUTHORIZED            | Not logged in                                      |
+| 403    | FORBIDDEN               | Can only complete for yourself                     |
+| 400    | VALIDATION_ERROR        | Missing userId or taskId                           |
+| 404    | NOT_FOUND               | User or task not found                             |
+| 400    | TASK_DISABLED           | Task is disabled                                   |
+| 400    | ALREADY_COMPLETED       | One-time task already done (may include `user`)    |
+| 400    | ALREADY_COMPLETED_TODAY | Daily task already done today (may include `user`) |
+| 409    | IDEMPOTENCY_REPLAY      | Same idempotency key already processed             |
 
-- **Settings → Git**: Confirm "Connected Git Repository" shows the correct repo (e.g. `your-org/task-reward-system`). If not, reconnect the repo.
-- **Git provider**: Vercel only reacts to pushes on the connected Git host. Pushing to another remote (e.g. a different GitHub org or a self-hosted Git) will not trigger Vercel.
-- **GitHub**: In the repo **Settings → Webhooks**, there should be a Vercel webhook. If it was removed or shows errors, reconnect the project in Vercel (Settings → Git → Disconnect and re-import).
-- **Deployments tab**: Check whether new commits appear as "Building" or "Queued". If not, the webhook may not be firing; try **Redeploy** from the latest deployment’s "..." menu to confirm the project builds.
+## Duplicate points and repeated requests
+
+**1. How duplicate points are avoided**
+
+Completions are enforced by the DB: one-time by (userId, taskId) in practice (one row per user per task); daily by primary key (userId, taskId, date). Before granting points we check existing completions and reject if already done. Idempotency keys: if the client sends the same `idempotencyKey` again, we return 409 and do not run the grant logic.
+
+**2. Same complete request triggered multiple times**
+
+First request: normal flow, points granted, completion and point record written. Later requests with the same idempotency key: 409, no second grant. If no key or different keys (e.g. double-click with new key each time), the second request is rejected by “already completed” or by the unique constraint on completions, so no double grant.
+
+**3. Extra design choices**
+
+- Unified error codes and messages (TASK_DISABLED, ALREADY_COMPLETED, ALREADY_COMPLETED_TODAY, IDEMPOTENCY_REPLAY). Some error responses include `user` so the client can update cache.
+- Completions table = who completed which task on which date (PK prevents duplicate completion). Point records table = audit trail of each points change.
+- Idempotency key table and optional `idempotencyKey` on complete endpoint so the same logical action can be retried or double-clicked without granting points twice.
+
+## Structure
+
+- `app/` — App Router pages and API routes
+- `app/api/` — auth, users, tasks
+- `lib/db/` — Drizzle schema and Neon client
+- `lib/auth.ts` — session JWT
+- `lib/api/` — response helpers, API client
+- `context/` — auth context
+- `scripts/seed.ts` — seed admin and default tasks
+
+## Local run
+
+Node.js 18+.
+
+1. `npm install`
+2. Copy `.env.example` to `.env.local`. Set `DATABASE_URL`, `SESSION_SECRET`, and for seed only `ADMIN_USERNAME`, `ADMIN_PASSWORD`.
+3. `npm run db:push` then `npm run db:seed`
+4. `npm run dev`
+
+Open [http://localhost:3000](http://localhost:3000); unauthenticated users go to `/login`. Seed creates admin, demo users (e.g. alice/bob), and default tasks.
+
+## Scripts
+
+| Command               | Description                 |
+| --------------------- | --------------------------- |
+| `npm run dev`         | Dev server                  |
+| `npm run build`       | Production build            |
+| `npm run start`       | Production start            |
+| `npm run db:push`     | Sync schema to Neon         |
+| `npm run db:seed`     | Seed admin and default data |
+| `npm run db:generate` | Generate migrations         |
+| `npm run db:migrate`  | Run migrations              |
+| `npm run db:studio`   | Drizzle Studio              |
+
+## Deploy (Vercel)
+
+1. Import repo in Vercel. Set production branch to `main`.
+2. Add env vars (e.g. `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`).
+3. Push to `main` to deploy.
